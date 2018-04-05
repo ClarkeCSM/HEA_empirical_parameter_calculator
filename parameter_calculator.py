@@ -6,15 +6,14 @@ from pymatgen.core import composition
 from citrination_client import *
 from pypif import pif
 
-client = CitrinationClient(environ["CITRINATION_API_KEY"], "https://citrination.com")
 
-def query_for_atomic_radius(atom):
+def query_for_property(property_name, formula):
 
-    prop_name_query = FieldQuery(filter=[Filter(equal="Atomic radius")])
-    prop_value_query = FieldQuery(extract_as="Atomic radius", extract_all=True)
+    prop_name_query = FieldQuery(filter=[Filter(equal=property_name)])
+    prop_value_query = FieldQuery(extract_as=property_name, extract_all=True)
     prop_query = PropertyQuery(name=prop_name_query, value=prop_value_query)
 
-    chemical_filter = ChemicalFilter(equal=atom, logic="MUST")
+    chemical_filter = ChemicalFilter(equal=formula, logic="MUST")
     formula_query = ChemicalFieldQuery(extract_as="formula", filter=chemical_filter)
 
     system_query = PifSystemQuery(chemical_formula=formula_query, properties=prop_query)
@@ -23,31 +22,13 @@ def query_for_atomic_radius(atom):
     test_query = PifSystemReturningQuery(query=data_query)
     pif_search_result = client.search(test_query)
 
-    atomic_radius = pif_search_result.hits[0].system.properties[0].scalars[0].value
+    for prop in pif_search_result.hits[0].system.properties:
+        if prop.name == property_name:
+            property_value = prop.scalars[0].value
 
-    print("ATOMIC RADIUS FOUND:", atom, atomic_radius)
+    # print(property_name, ":", formula, property_value)
 
-    return float(atomic_radius)
-
-
-def query_for_binary_enthalpy(binary_formula):
-
-    prop_name_query = FieldQuery(filter=[Filter(equal="Enthalpy of mixing")])
-    prop_value_query = FieldQuery(extract_as="Enthalpy of mixing", extract_all=True)
-    prop_query = PropertyQuery(name=prop_name_query, value=prop_value_query)
-    chemical_filter = ChemicalFilter(equal=binary_formula, logic="MUST")
-    formula_query = ChemicalFieldQuery(extract_as="formula", filter=chemical_filter)
-    system_query = PifSystemQuery(chemical_formula=formula_query, properties=prop_query)
-    dataset_query = DatasetQuery(id=[Filter(equal='156599')])
-    data_query = DataQuery(dataset=dataset_query, system=system_query)
-    test_query = PifSystemReturningQuery(query=data_query)
-    pif_search_result = client.search(test_query)
-
-    binary_enthalpy_of_mixing = pif_search_result.hits[0].system.properties[0].scalars[0].value
-
-    print("BINARY ENTHALPY FOUND:", binary_formula, binary_enthalpy_of_mixing)
-
-    return binary_enthalpy_of_mixing
+    return float(property_value)
 
 
 def calc_enthalpy_of_mixing(chemical_formula):
@@ -63,7 +44,7 @@ def calc_enthalpy_of_mixing(chemical_formula):
     for c in itertools.combinations(elements, 2):
 
         binary = "".join(c)
-        binary_enthalpy = query_for_binary_enthalpy(binary)
+        binary_enthalpy = query_for_property("Enthalpy of mixing", binary)
         binary_enthalpies[binary] = binary_enthalpy
 
     enthalpy_of_mixing = 0
@@ -80,7 +61,7 @@ def calc_enthalpy_of_mixing(chemical_formula):
     return(enthalpy_of_mixing)
 
 
-def cal_entropy_of_mixing(chemical_formula):
+def calc_entropy_of_mixing(chemical_formula):
 
     comp = composition.Composition(chemical_formula)
     entropy_of_mixing = 0
@@ -105,11 +86,11 @@ def calc_atomic_size_difference(chemical_formula):
 
 
     for element in comp:
-        atomic_radius = query_for_atomic_radius(str(element))
+        atomic_radius = query_for_property("Atomic radius", str(element))
         average_atomic_radius += float(comp.get_atomic_fraction(element))*float(atomic_radius)
 
     for element in comp:
-        atomic_radius = query_for_atomic_radius(str(element))
+        atomic_radius = query_for_property("Atomic radius", str(element))
         ele_fraction = float(comp.get_atomic_fraction(str(element)))
         total_contribution = ele_fraction*((1-(atomic_radius/average_atomic_radius))**2)
         atomic_size_difference += total_contribution
@@ -118,15 +99,38 @@ def calc_atomic_size_difference(chemical_formula):
 
     return round(atomic_size_difference, 3)
 
+
+def calc_omega(chemical_formula):
+
+    comp = composition.Composition(chemical_formula)
+
+    average_melting_temp = 0
+
+    for element in comp:
+        melting_temp = query_for_property("Melting temperature", str(element))
+        average_melting_temp += float(comp.get_atomic_fraction(element))*float(melting_temp)
+
+    entropy_of_mixing = calc_entropy_of_mixing(chemical_formula)
+    enthalpy_of_mixing = calc_enthalpy_of_mixing(chemical_formula)
+
+    omega = (average_melting_temp*entropy_of_mixing)/(1000*enthalpy_of_mixing)
+
+    return round(omega, 3)
+
+
 if __name__ == "__main__":
+    
+    client = CitrinationClient(environ["CITRINATION_API_KEY"], "https://citrination.com")
 
     enthalpy_of_mixing = calc_enthalpy_of_mixing(sys.argv[1])
     print("ENTHALPY OF MIXING CALCULATED:", enthalpy_of_mixing, "kJ/mol")
 
-    entropy_of_mixing = cal_entropy_of_mixing(sys.argv[1])
+    entropy_of_mixing = calc_entropy_of_mixing(sys.argv[1])
     print("ENTROPY OF MIXING CALCULATED:", entropy_of_mixing, "J*K/mol")
 
     atomic_size_difference = calc_atomic_size_difference(sys.argv[1])
     print("ATOMIC SIZE DIFFERENCE CALCULATED:", atomic_size_difference, "%")
 
+    omega = calc_omega(sys.argv[1])
+    print("OMEGA CALCULATED:", omega, "")
 
