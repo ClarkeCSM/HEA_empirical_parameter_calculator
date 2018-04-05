@@ -118,8 +118,43 @@ def calc_omega(chemical_formula):
     return round(omega, 3)
 
 
+def calc_avg_VEC(chemical_formula):
+
+    comp = composition.Composition(chemical_formula)
+
+    avg_VEC = 0
+
+    for element in comp:
+        VEC = query_for_property("Valence Electron Configuration", str(element))
+        avg_VEC += float(comp.get_atomic_fraction(element)) * float(VEC)
+
+    return round(avg_VEC, 3)
+
+
+def calc_elecneg_diff(chemical_formula):
+
+    comp = composition.Composition(chemical_formula)
+
+    avg_elec = 0
+
+    for element in comp:
+        elec = query_for_property("Pauling electronegativity", str(element))
+        avg_elec += float(comp.get_atomic_fraction(element)) * float(elec)
+
+    elec_diff = 0
+    for element in comp:
+        elec = query_for_property("Pauling electronegativity", str(element))
+        ele_fraction = float(comp.get_atomic_fraction(str(element)))
+        contribution = ele_fraction*((elec-avg_elec)**2)
+        elec_diff += contribution
+
+    elec_diff = math.sqrt(elec_diff)
+
+    return round(elec_diff, 3)
+
+
 if __name__ == "__main__":
-    
+
     client = CitrinationClient(environ["CITRINATION_API_KEY"], "https://citrination.com")
 
     enthalpy_of_mixing = calc_enthalpy_of_mixing(sys.argv[1])
@@ -133,4 +168,10 @@ if __name__ == "__main__":
 
     omega = calc_omega(sys.argv[1])
     print("OMEGA CALCULATED:", omega, "")
+
+    VEC = calc_avg_VEC(sys.argv[1])
+    print("VEC CALCULATED:", VEC, "")
+
+    elec_diff = calc_elecneg_diff(sys.argv[1])
+    print("deltaX CALCULATED:", elec_diff, "")
 
