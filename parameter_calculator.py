@@ -4,7 +4,6 @@ import itertools
 from os import environ
 from pymatgen.core import composition
 from citrination_client import *
-from pypif import pif
 
 
 def query_for_property(property_name, formula):
@@ -12,10 +11,8 @@ def query_for_property(property_name, formula):
     prop_name_query = FieldQuery(filter=[Filter(equal=property_name)])
     prop_value_query = FieldQuery(extract_as=property_name, extract_all=True)
     prop_query = PropertyQuery(name=prop_name_query, value=prop_value_query)
-
     chemical_filter = ChemicalFilter(equal=formula, logic="MUST")
     formula_query = ChemicalFieldQuery(extract_as="formula", filter=chemical_filter)
-
     system_query = PifSystemQuery(chemical_formula=formula_query, properties=prop_query)
     dataset_query = DatasetQuery(id=[Filter(equal='156599')])
     data_query = DataQuery(dataset=dataset_query, system=system_query)
@@ -83,7 +80,6 @@ def calc_atomic_size_difference(chemical_formula):
 
     average_atomic_radius = 0
     atomic_size_difference = 0
-
 
     for element in comp:
         atomic_radius = query_for_property("Atomic radius", str(element))
