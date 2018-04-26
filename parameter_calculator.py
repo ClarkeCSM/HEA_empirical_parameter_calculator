@@ -1,7 +1,8 @@
 import sys
 import math
 import itertools
-from os import environ
+import csv
+from os import environ, path
 from pymatgen.core import composition
 from citrination_client import *
 
@@ -149,25 +150,88 @@ def calc_elecneg_diff(chemical_formula):
     return round(elec_diff, 3)
 
 
+def parse_template_file_for_formulas(csv_template_file):
+
+    alloys = []
+
+    with open(csv_template_file, "r") as csv_file:
+        reader = csv.reader(csv_file)
+        for index, row in enumerate(reader):
+            if index == 0:
+                header_row = row
+                for h_index, header in enumerate(header_row):
+                    if header == "FORMULA":
+                        formula_index = h_index
+            else:
+                alloys.append(row[formula_index])
+
+
+    return alloys
+
+
+def add_properties_to_csv(csv_template_file, formulas, property_headers, property_values):
+
+    infile = open(csv_template_file, "r")
+    outfile = open(csv_template_file.replace(".csv", "_with_emp_parameters.csv"), "w")
+
+    reader = csv.reader(infile)
+    writer = csv.writer(outfile)
+    new_rows = []
+
+    for index, row in enumerate(reader):
+        if index == 0:
+            header_row = row
+            header_row.extend(property_headers)
+            new_rows.append(header_row)
+            for h_index, header in enumerate(header_row):
+                if header == "FORMULA":
+                    formula_index = h_index
+        else:
+            if row[formula_index] in formulas:
+                row.extend(property_values[formulas.index(row[formula_index])])
+                new_rows.append(row)
+
+    print(len(new_rows), len(formulas))
+    writer.writerows(new_rows)
+
+
 if __name__ == "__main__":
 
     client = CitrinationClient(environ["CITRINATION_API_KEY"], "https://citrination.com")
 
-    enthalpy_of_mixing = calc_enthalpy_of_mixing(sys.argv[1])
-    print("ENTHALPY OF MIXING CALCULATED:", enthalpy_of_mixing, "kJ/mol")
+    input_file = sys.argv[1]
 
-    entropy_of_mixing = calc_entropy_of_mixing(sys.argv[1])
-    print("ENTROPY OF MIXING CALCULATED:", entropy_of_mixing, "J*K/mol")
+    alloys = parse_template_file_for_formulas(input_file)
 
-    atomic_size_difference = calc_atomic_size_difference(sys.argv[1])
-    print("ATOMIC SIZE DIFFERENCE CALCULATED:", atomic_size_difference, "%")
+    property_values = []
+    property_headers = ["PROPERTY: Enthalpy of mixing (kJ/mol)", "PROPERTY: Entropy of mixing (J*K/mol)",
+                        "PROPERTY: Atomic size difference (%)", "PROPERTY: $\Omega$", "PROPERTY: average VEC",
+                        "PROPERTY: $\delta$ X)"]
 
-    omega = calc_omega(sys.argv[1])
-    print("OMEGA CALCULATED:", omega, "")
+    for alloy in alloys:
+        print("----{}-----".format(alloy))
 
-    VEC = calc_avg_VEC(sys.argv[1])
-    print("VEC CALCULATED:", VEC, "")
+        enthalpy_of_mixing = calc_enthalpy_of_mixing(alloy)
+        print("Enthalpy of mixing:", enthalpy_of_mixing, "kJ/mol")
 
-    elec_diff = calc_elecneg_diff(sys.argv[1])
-    print("deltaX CALCULATED:", elec_diff, "")
+        entropy_of_mixing = calc_entropy_of_mixing(alloy)
+        print("Entropy of mixing:", entropy_of_mixing, "J*K/mol")
+
+        atomic_size_difference = calc_atomic_size_difference(alloy)
+        print("Atomic size difference:", atomic_size_difference, "%")
+
+        omega = calc_omega(alloy)
+        print("Omega:", omega, "")
+
+        VEC = calc_avg_VEC(alloy)
+        print("VEC:", VEC, "")
+
+        elec_diff = calc_elecneg_diff(alloy)
+        print("deltaX:", elec_diff, "")
+
+        property_values.append([enthalpy_of_mixing, entropy_of_mixing, atomic_size_difference, omega, VEC, elec_diff])
+
+
+    add_properties_to_csv(input_file, alloys, property_headers, property_values)
+
 
